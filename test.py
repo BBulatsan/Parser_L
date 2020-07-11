@@ -1,8 +1,10 @@
 import requests
 from bs4 import BeautifulSoup
 import csv
+from requests.adapters import HTTPAdapter
+from requests.exceptions import ConnectionError
 
-url = 'https://uaot.org.ua'
+base_url = 'https://uaot.org.ua'
 
 
 def get_html(url):
@@ -13,46 +15,60 @@ def get_html(url):
 
 
 def write_csv(data):
-    with open('as.csv', 'a') as file:
+    with open('Links_Parsed.csv', 'a') as file:
         writer = csv.writer(file)
-        writer.writerow((data['title'],
-                         data['price'],
-                         data['metro'],
+        writer.writerow((data['status'],
                          data['url']))
 
 
-def get_all_a(html):
+def get_all_urls(html):
     soup = BeautifulSoup(html, 'lxml')
     a = soup.find_all('a')
-    list_a = []
+    list_urls = []
     for i in a:
         try:
             hr = i.get('href').strip()
             if hr.startswith('/'):
-                list_a.append(url + hr)
+                list_urls.append(base_url + hr)
             elif hr.startswith('tel'):
                 continue
             else:
-                list_a.append(hr)
+                list_urls.append(hr)
         except:
-            list_a.append('fall')
+            print('fall')
 
-    return list_a
+    return list(set(list_urls))
 
 
-def check_links(html):
+def check_links(url):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36'}
-    status = requests.get(url, headers=headers)
-    return status
+    # try:
+    #     status = requests.get(url, timeout=(5, 5), headers=headers)
+    # except:
+    #     print('Time out!')
+
+    adapter = HTTPAdapter(max_retries=3)
+    session = requests.Session()
+
+    session.mount(url, adapter)
+
+    try:
+        status = session.get(url, headers=headers)
+    except ConnectionError as ce:
+        print(ce)
+    return status.status_code
 
 
 def main():
-    all_a = get_all_a(get_html(url))
-    for a in all_a:
-        print(a)
-        cheker = str(check_links(get_html(a)))
-        print(cheker)
+    all_a = get_all_urls(get_html(base_url))
+    for url in all_a:
+        print(url)
+        status = check_links(url)
+        print(status)
+        data = {'status': status,
+                'url': url}
+        write_csv(data)
 
 
 if __name__ == '__main__':
